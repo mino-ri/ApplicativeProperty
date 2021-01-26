@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net5.0</TargetFramework>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Internal.fs" />
+    <Compile Include="Disposable.fs" />
+    <Compile Include="Abstractions.fs" />
+    <Compile Include="ValueProp.fs" />
+    <Compile Include="Interops.fs" />
+    <Compile Include="Prop.fs" />
+    <Compile Include="PropOperators.fs" />
+  </ItemGroup>
+
+</Project>
