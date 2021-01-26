@@ -17,6 +17,7 @@
     <Compile Include="Interops.fs" />
     <Compile Include="Prop.fs" />
     <Compile Include="PropOperators.fs" />
+    <Compile Include="PropExtensions.fs" />
   </ItemGroup>
 
 </Project>

@@ -148,6 +148,6 @@ let inline ( ~+. ) prop = Prop.map (~+) prop
 
 let inline ( ~-. ) prop = Prop.map (~-) prop
 
-let inline (<--) (setProp: ISetProp<'a>) (getProp: IGetProp<'a>) = getProp.Subscribe(setProp)
+let inline (<--) (setProp: ISetProp<'a>) (getProp: IGetProp<'a>) = getProp.Subscribe(setProp.OnNext)
 
-let inline (-->) (getProp: IGetProp<'a>) (setProp: ISetProp<'a>) = getProp.Subscribe(setProp)
+let inline (-->) (getProp: IGetProp<'a>) (setProp: ISetProp<'a>) = getProp.Subscribe(setProp.OnNext)

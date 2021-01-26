@@ -25,9 +25,3 @@ type INotifyProp<'T> =
 type IDisposableGetProp<'T> =
     inherit IGetProp<'T>
     inherit IDisposable
-
-[<Sealed; AbstractClass; Extension>]
-type PropExtensions =
-    [<Extension>]
-    static member Subscribe<'T>(getProp: IGetProp<'T>, setProp: ISetProp<'T>) =
-        getProp.Subscribe(setProp.OnNext)

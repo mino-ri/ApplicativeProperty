@@ -64,8 +64,11 @@ type CompositeDisposable(source: seq<IDisposable>) =
 
 
 module Disposable =
+    [<CompiledName("Dummy")>]
     let dummy = { new IDisposable with member __.Dispose() = () }
 
+    [<CompiledName("Create")>]
     let create onDispose = new ActionDisposable(onDispose) :> IDisposable
 
+    [<CompiledName("Collect")>]
     let collect disposables = new CompositeDisposable(disposables) :> IDisposable
