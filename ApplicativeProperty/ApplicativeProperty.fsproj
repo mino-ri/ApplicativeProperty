@@ -14,9 +14,11 @@
     <Compile Include="Disposable.fs" />
     <Compile Include="Abstractions.fs" />
     <Compile Include="ValueProp.fs" />
-    <Compile Include="Interops.fs" />
+    <Compile Include="Command.fs" />
+    <Compile Include="Observable.fs" />
     <Compile Include="Prop.fs" />
     <Compile Include="PropOperators.fs" />
+    <Compile Include="ObservableExtensions.fs" />
     <Compile Include="PropExtensions.fs" />
   </ItemGroup>
 

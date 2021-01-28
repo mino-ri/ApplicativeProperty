@@ -3,29 +3,12 @@ open System
 open System.Runtime.CompilerServices
 open System.Windows.Input
 
-[<Sealed; AbstractClass; Extension; CompiledName("Prop")>]
+[<Sealed; AbstractClass; Extension>]
 type PropExtensions =
-    [<Extension>]
-    static member Subscribe(getProp: IGetProp<'T>, setProp: ISetProp<'T>) =
-        getProp.Subscribe(setProp.OnNext)
 
     [<Extension>]
     static member Subscribe(getProp: IGetProp<'T>, onNext) =
         getProp.Subscribe(action1 onNext)
-
-    static member Constant(value: 'T) = Prop.constant value
-
-    [<Extension>]
-    static member ToGetProp(source: IObservable<'T>, init) = Prop.ofObservable init source
-
-    [<Extension>]
-    static member ToGetPropWithError(source: IObservable<'T>, init) = Prop.ofObservableWithExn init source
-
-    [<Extension>]
-    static member ToObservable(prop: IGetProp<'T>) = Prop.toObservable prop
-
-    [<Extension>]
-    static member AsGet(prop: IGetProp<'T>) = Prop.asGet prop
 
     [<Extension>]
     static member Select(prop, selector: Func<'T, 'U>) = Prop.map selector.Invoke prop
@@ -37,15 +20,6 @@ type PropExtensions =
     static member Zip(prop1, prop2, prop3, selector: Func<'T1, 'T2, 'T3, 'U>) = Prop.map3 (fun x y z -> selector.Invoke(x, y, z)) prop1 prop2 prop3
 
     [<Extension>]
-    static member SelectMany(prop, selector: Func<'T, IGetProp<'U>>) = Prop.bind selector.Invoke prop
-
-    [<Extension>]
-    static member Cache(prop: IGetProp<'T>) = Prop.cache prop
-
-    [<Extension>]
-    static member Where(prop, predicate: Func<'T, bool>) = Prop.filter predicate.Invoke prop
-
-    [<Extension>]
     static member WhereCached(prop, predicate: Func<'T, bool>) = Prop.filterc predicate.Invoke prop
 
     [<Extension>]
@@ -54,30 +28,21 @@ type PropExtensions =
         Prop.map vfst cached, Prop.map vsnd cached
 
     [<Extension>]
-    static member Apply(funcProp: IGetProp<'T -> 'U>, argProp) = Prop.apply funcProp argProp
-
-    static member OnSet(onNext: Action<'T>) = { new ISetProp<'T> with member _.OnNext(value) = onNext.Invoke(value) }
-
-    [<Extension>]
-    static member AsSet(prop: ISetProp<'T>) = Prop.asSet prop
+    static member Apply(funcProp: IGetProp<Func<'T, 'U>>, argProp) =
+        (funcProp, argProp) ||> Prop.map2 (fun f x -> f.Invoke(x))
 
     [<Extension>]
-    static member SelectSet(prop, selector: Func<'U, 'T>) = Prop.mapSet selector.Invoke prop
+    static member Apply(funcProp: IGetProp<Func<'T1, 'T2, 'U>>, argProp1, argProp2) =
+        (funcProp, argProp1, argProp2) |||> Prop.map3 (fun f x y -> f.Invoke(x, y))
 
     [<Extension>]
-    static member ZipSet(prop1, prop2, selector: Func<'U, struct('T1 * 'T2)>) =
-        Prop.map2Set (tuple2 selector) prop1 prop2
+    static member Apply2(funcProp: IGetProp<'T -> 'U>, argProp) = Prop.apply funcProp argProp
 
     [<Extension>]
-    static member WhereSet(prop, predicate: Func<'T, bool>) = Prop.filterSet predicate.Invoke prop
-
-    static member Value(value) = ValueProp<'T>(value)
-
-    [<Extension>]
-    static member WithSet(getter: IGetProp<'T>, setter) = Prop.withSet setter getter
+    static member WithSet(getter, setter) : IProp<'T> = Prop.withSet setter getter
     
     [<Extension>]
-    static member WithGet(setter: ISetProp<'T>, getter) = Prop.withGet getter setter
+    static member WithGet(setter, getter) : IProp<'T> = Prop.withGet getter setter
 
     [<Extension>]
     static member Modify(prop, modification: Func<'T, 'T>) = Prop.modify modification.Invoke prop
@@ -88,45 +53,16 @@ type PropExtensions =
 
     [<Extension>]
     static member ZipBoth(prop1, prop2, getSelector:Func<'T1, 'T2, 'U>, setSelector) =
-        Prop.map2Both (fun x y -> getSelector.Invoke(x, y)) (tuple2 setSelector) prop1 prop2
+        Prop.map2Both (func2 getSelector) (tuple2 setSelector) prop1 prop2
 
     [<Extension>]
-    static member ToReadOnlyNotify(prop: IGetProp<'T>) = NotifyGetProp(prop)
-
-    [<Extension>]
-    static member ToNotify(prop: IProp<'T>) = NotifyProp(prop)
-
-    static member NotifyValue(init: 'T) = NotifyProp(ValueProp(init))
-
-    [<Extension>]
-    static member ToNotifyWithGet(setter: ISetProp<'T>, getter: IGetProp<'T>) = NotifyProp(getter, setter)
-
-    [<Extension>]
-    static member ToNotifyWithSet(getter: IGetProp<'T>, setter: ISetProp<'T>) = NotifyProp(getter, setter)
+    static member ZipBoth(prop1, prop2, prop3, getSelector:Func<'T1, 'T2, 'T3, 'U>, setSelector) =
+        Prop.map3Both (func3 getSelector) (tuple3 setSelector) prop1 prop2 prop3
 
     [<Extension>]
     static member ToCommand(canExecute, onExecute: Action<obj>) = Command(onExecute.Invoke, canExecute) :> ICommand
 
     [<Extension>]
     static member ToCommand(canExecute) =
-        let valueProp = ValueProp(null)
-        struct(Command(valueProp.OnNext, canExecute) :> ICommand, valueProp :> IGetProp<obj>)
-
-    [<Extension>]
-    static member Increment(prop) = Prop.incr prop
-
-    [<Extension>]
-    static member Decrement(prop) = Prop.decr prop
-
-    [<Extension>]
-    static member Not(prop) = Prop.not prop
-
-    [<Extension>]
-    static member NotSet(prop) = Prop.notSet prop
-
-    [<Extension>]
-    static member NotBoth(prop) = Prop.notBoth prop
-
-    static member True = Prop.ctrue
-
-    static member False = Prop.cfalse
+        let subject = Subject()
+        struct(Command(subject.OnNext, canExecute) :> ICommand, Observable.asObservable subject)

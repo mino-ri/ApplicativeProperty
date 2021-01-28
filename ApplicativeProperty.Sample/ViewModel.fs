@@ -7,11 +7,11 @@ type ViewModel() =
     let value1 = Prop.value 0
     let value2 = Prop.value 1
 
-    member val Value1 = Prop.notify value1
+    member _.Value1 = value1
     
-    member val Value2 = Prop.notify value2
+    member _.Value2 = value2
     
-    member val Sum = Prop.notifyGet (value1 .+. value2)
+    member val Sum = value1 .+. value2
     
     member val IncrementCommand =
         Prop.command

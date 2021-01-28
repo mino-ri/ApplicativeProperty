@@ -35,3 +35,45 @@ let inline func3 (f: Func<_, _, _, _>) x y z = f.Invoke(x, y, z)
 let inline tuple2 (f: Func<_, struct(_ * _)>) x = let struct(y, z) = f.Invoke(x) in y, z
 
 let inline tuple3 (f: Func<_, struct(_ * _ * _)>) x = let struct(y, z, w) = f.Invoke(x) in y, z, w
+
+
+[<AbstractClass>]
+type internal BasicObserver<'T>() =
+    let mutable stoped = false
+    abstract member OnNext : 'T -> unit
+    abstract member OnCompleted : unit -> unit
+    abstract member OnError : exn -> unit
+
+    interface IObserver<'T> with
+        member this.OnNext(value) =
+            if not stoped then
+                try this.OnNext(value) with
+                | error ->
+                    stoped <- true
+                    this.OnError(error)
+
+        member this.OnError(error) =
+            if not stoped then
+                stoped <- true
+                this.OnError(error)
+
+        member this.OnCompleted() =
+            if not stoped then
+                stoped <- true
+                this.OnCompleted()
+
+
+[<AbstractClass>]
+type internal MapObserver<'T, 'U>(observer: IObserver<'T>) =
+    inherit BasicObserver<'U>()
+    override _.OnError(error) = observer.OnError(error)
+    override _.OnCompleted() = observer.OnCompleted()
+
+
+let inline subsc onNext (observer: IObserver<_>) (observable: IObservable<_>) =
+    observable.Subscribe({new MapObserver<_, _>(observer) with
+        member _.OnNext(value) = onNext value
+    })
+
+let inline mapSubsc mapping (observer: IObserver<_>) (observable: IObservable<_>) =
+    subsc (mapping >> observer.OnNext) observer observable

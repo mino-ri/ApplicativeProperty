@@ -1,4 +1,5 @@
 ﻿module ApplicativeProperty.PropOperators
+open System
 
 let inline ( .+. ) prop1 prop2 = Prop.map2 (+) prop1 prop2
 
@@ -148,6 +149,10 @@ let inline ( ~+. ) prop = Prop.map (~+) prop
 
 let inline ( ~-. ) prop = Prop.map (~-) prop
 
-let inline (<--) (setProp: ISetProp<'a>) (getProp: IGetProp<'a>) = getProp.Subscribe(setProp.OnNext)
+let inline ( .<-. ) observer (getProp: IGetProp<_>) = getProp.Subscribe(observer)
 
-let inline (-->) (getProp: IGetProp<'a>) (setProp: ISetProp<'a>) = getProp.Subscribe(setProp.OnNext)
+let inline ( .->. ) (getProp: IGetProp<_>) observer = getProp.Subscribe(observer)
+
+let inline ( .<- ) (observer: IObserver<_>) value = observer.OnNext(value)
+
+let inline ( ->. ) value (observer: IObserver<_>) = observer.OnNext(value)

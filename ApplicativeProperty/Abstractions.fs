@@ -1,26 +1,19 @@
 ﻿namespace ApplicativeProperty
 open System
 open System.ComponentModel
-open System.Runtime.CompilerServices
+
+type ISubject<'T> =
+    inherit IObservable<'T>
+    inherit IObserver<'T>
 
 type IGetProp<'T> =
-    abstract member Value : 'T with get
-    abstract member Subscribe : onNext: ('T -> unit) -> IDisposable
-
-type ISetProp<'T> =
-    abstract member OnNext : vaue: 'T -> unit
+    inherit IObservable<'T>
+    inherit INotifyPropertyChanged
+    abstract member Value : 'T
 
 type IProp<'T> =
-    inherit ISetProp<'T>
     inherit IGetProp<'T>
-
-type INotifyGetProp<'T> =
-    inherit IGetProp<'T>
-    inherit INotifyPropertyChanged
-
-type INotifyProp<'T> =
-    inherit IProp<'T>
-    inherit INotifyGetProp<'T>
+    inherit ISubject<'T>
 
 type IDisposableGetProp<'T> =
     inherit IGetProp<'T>

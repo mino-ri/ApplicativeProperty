@@ -1,116 +1,94 @@
-﻿[<RequireQualifiedAccess; CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+﻿[<RequireQualifiedAccess; System.Runtime.CompilerServices.Extension>]
 module ApplicativeProperty.Prop
 open System
+open System.Runtime.CompilerServices
 open System.Windows.Input
 
-[<Sealed>]
-type ObservableProp<'T>(init: 'T, observable: IObservable<'T>, subscriver: ('T -> unit) -> IObserver<'T>) =
-    let mutable backField = init
-    let disconnector = observable.Subscribe(fun value -> backField <- value)
-    interface IDisposableGetProp<'T> with
-        member _.Value = backField
-        member _.Subscribe(onNext) = observable.Subscribe(subscriver onNext)
-        member _.Dispose() = disconnector.Dispose()
+
+[<AbstractClass>]
+type private BasicGetProp<'T>() =
+    let events = PropertyChangedEventHolder<'T>(ResizeArray())
+    abstract member Value : 'T
+    abstract member Subscribe : observer: IObserver<'T> -> IDisposable
+    interface IGetProp<'T> with
+        member this.Value = this.Value
+        member this.Subscribe(onNext) = this.Subscribe(onNext)
+        member this.add_PropertyChanged(handler) = events.Add(handler, this)
+        member _.remove_PropertyChanged(handler) = events.Remove(handler)
+
+
+[<AbstractClass>]
+type private BasicProp<'T>() =
+    inherit BasicGetProp<'T>()
+    abstract member OnNext : 'T -> unit
+    abstract member OnCompleted : unit -> unit
+    abstract member OnError : exn -> unit
+    interface IProp<'T> with
+        member this.OnNext(value) = this.OnNext(value)
+        member this.OnError(error) = this.OnError(error)
+        member this.OnCompleted() = this.OnCompleted()
 
 
 [<CompiledName("Constant")>]
-let constant value = ConstProp(value)
+let constant (value: 'T) = ConstProp(value)
 
-[<CompiledName("OfObservable")>]
-let ofObservable init (source: IObservable<'T>) =
-    new ObservableProp<'T>(init, source, fun onNext -> 
-        { new IObserver<'T> with
-            member _.OnNext(value) = onNext(value)
-            member _.OnCompleted() = ()
-            member _.OnError(_) = ()
-        })
-    :> IDisposableGetProp<'T>
+[<CompiledName("ToProp"); Extension>]
+let ofObservable init source =
+    let prop = new ObserverProp<'T>(init)
+    prop.Observe(source)
+    prop
 
-[<CompiledName("OfObservableWithError")>]
-let ofObservableWithExn init (source: IObservable<'T>) =
-    new ObservableProp<'T>(init, source, fun onNext -> 
-        { new IObserver<'T> with
-            member _.OnNext(value) = onNext(value)
-            member _.OnCompleted() = ()
-            member _.OnError(error) = raise error
-        })
-    :> IDisposableGetProp<'T>
-
-[<CompiledName("TofObservable")>]
-let toObservable (prop: IGetProp<'T>) =
-    { new IObservable<'T> with
-        member _.Subscribe(observer) = prop.Subscribe(observer.OnNext) }
-
-[<CompiledName("Subscribe")>]
-let add onNext (prop: IGetProp<'T>) = ignore (prop.Subscribe(onNext))
-
-[<CompiledName("Subscribe")>]
-let subscribe onNext (prop: IGetProp<'T>) = prop.Subscribe(onNext)
-
-[<CompiledName("AsGet")>]
+[<CompiledName("AsGet"); Extension>]
 let asGet (prop: IGetProp<'T>) =
-    { new IGetProp<'T> with
+    { new BasicGetProp<'T>() with
         member _.Value = prop.Value
-        member _.Subscribe(onNext) = prop.Subscribe(onNext) }
+        member _.Subscribe(observer) = prop.Subscribe(observer)
+    } :> IGetProp<_>
 
 [<CompiledName("Map")>]
 let map mapping (prop: IGetProp<'T>) =
-    { new IGetProp<'U> with
+    { new BasicGetProp<'U>() with
         member _.Value = mapping prop.Value
-        member _.Subscribe(onNext) = prop.Subscribe(mapping >> onNext) }
+        member _.Subscribe(observer) = (observer, prop) ||> mapSubsc mapping
+    } :> IGetProp<_>
 
 [<CompiledName("Map")>]
 let map2 mapping (prop1: IGetProp<'T1>) (prop2: IGetProp<'T2>) =
-    { new IGetProp<'U> with
+    { new BasicGetProp<'U>() with
         member _.Value = mapping prop1.Value prop2.Value
-        member _.Subscribe(onNext) =
+        member _.Subscribe(observer) =
             Disposable.collect [|
-                prop1.Subscribe(fun value -> onNext (mapping value prop2.Value))
-                prop2.Subscribe(fun value -> onNext (mapping prop1.Value value))
+                (observer, prop1) ||> mapSubsc(fun value -> mapping value prop2.Value)
+                (observer, prop2) ||> mapSubsc(fun value -> mapping prop1.Value value)
             |]
-    }
+    } :> IGetProp<_>
 
 [<CompiledName("Map")>]
 let map3 mapping (prop1: IGetProp<'T1>) (prop2: IGetProp<'T2>) (prop3: IGetProp<'T3>) =
-    { new IGetProp<'U> with
+    { new BasicGetProp<'U>() with
         member _.Value = mapping prop1.Value prop2.Value prop3.Value
-        member _.Subscribe(onNext) =
+        member _.Subscribe(observer) =
             Disposable.collect [|
-                prop1.Subscribe(fun value -> onNext (mapping value prop2.Value prop3.Value))
-                prop2.Subscribe(fun value -> onNext (mapping prop1.Value value prop3.Value))
-                prop3.Subscribe(fun value -> onNext (mapping prop1.Value prop2.Value value))
+                (observer, prop1) ||> mapSubsc(fun value -> mapping value prop2.Value prop3.Value)
+                (observer, prop2) ||> mapSubsc(fun value -> mapping prop1.Value value prop3.Value)
+                (observer, prop3) ||> mapSubsc(fun value -> mapping prop1.Value prop2.Value value)
             |]
-    }
+    } :> IGetProp<_>
 
-[<CompiledName("Bind")>]
-let bind (mapping: 'T -> IGetProp<'U>) (prop: IGetProp<'T>) =
-    { new IGetProp<'U> with
-        member _.Value = (mapping prop.Value).Value
-        member _.Subscribe(onNext) =
-            let disposer = new CompositeDisposable()
-            disposer.Add(prop.Subscribe(fun value -> disposer.Add((mapping value).Subscribe(onNext))))
-            disposer :> IDisposable
-    }
+[<CompiledName("Cache"); Extension>]
+let cache (prop: IGetProp<'T>) = ofObservable prop.Value prop
 
-[<CompiledName("Cache")>]
-let cache (prop: IGetProp<'T>) =
-    let p = ValueProp(prop.Value)
-    ignore (prop.Subscribe(p.OnNext))
-    p :> IGetProp<'T>
+[<CompiledName("ScanCached")>]
+let scanc collector state (prop: IGetProp<'T>) = Observable.scan collector state prop |> ofObservable state
 
-[<CompiledName("Filter")>]
-let filter pred (prop: IGetProp<'T>) =
-    { new IGetProp<'T> with
-        member _.Value = prop.Value
-        member _.Subscribe(onNext) =
-            prop.Subscribe(fun value -> if pred value then onNext value)
-    }
+[<CompiledName("ChooseCached")>]
+let choosec chooser (init: 'U) (prop: IGetProp<'T>) = Observable.choose chooser prop |> ofObservable init
 
 [<CompiledName("FilterCached")>]
-let filterc pred init (prop: IGetProp<'T>) =
-    let p = ValueProp(if pred prop.Value then prop.Value else init)
-    ignore (prop.Subscribe(fun v -> if pred v then p.OnNext(v)))
-    p :> IGetProp<'T>
+let filterc pred init (prop: IGetProp<'T>) = Observable.filter pred prop |> ofObservable init
+
+[<CompiledName("MergeCached")>]
+let mergec (other: IObservable<'T>) (prop: IGetProp<'T>) = Observable.merge prop other |> ofObservable prop.Value
 
 [<CompiledName("Zip")>]
 let zip (prop1: IGetProp<'T1>) (prop2: IGetProp<'T2>) = map2 tpl2 prop1 prop2
@@ -130,59 +108,22 @@ let unzip3 (prop: IGetProp<'T1 * 'T2 * 'T3>) =
     map fst3 cached, map snd3 cached, map thd3 cached
 
 [<CompiledName("Apply")>]
-let apply (funcProp: IGetProp<'T -> 'U>) (argProp: IGetProp<'T>) =
+let apply (funcProp: IGetProp<'T -> 'U>) argProp =
     map2 (<|) funcProp argProp
+
+[<CompiledName("Apply")>]
+let apply2 (funcProp: IGetProp<'T1 -> 'T2 -> 'U>) argProp1 argProp2 =
+    map3 (fun f a b -> f a b) funcProp argProp1 argProp2
+
 
 type GetPropBuilder() =
     member __.MergeSources(t1, t2) : IGetProp<'T1 * 'T2> = zip t1 t2
     member __.BindReturn(m, f: 'T -> 'U) = map f m
-    member __.Bind(m, f: 'T -> IGetProp<'U>) = bind f m
     member __.Return(x: 'T) = constant x
     member __.ReturnFrom(m: IGetProp<'T>) = m
 
 [<CompiledName("CreateGetPropBuilder")>]
 let prop = GetPropBuilder()
-
-// == set way ======================================================================
-
-[<CompiledName("OnSet")>]
-let onSet f = { new ISetProp<'T> with member _.OnNext(value) = f value }
-
-[<CompiledName("OnNext")>]
-let onNext value (prop: ISetProp<'T>) = prop.OnNext(value)
-
-[<CompiledName("AsSet")>]
-let asSet (prop: ISetProp<'T>) =
-    { new ISetProp<'T> with member _.OnNext(value) = prop.OnNext(value) }
-
-[<CompiledName("MapSet")>]
-let mapSet mapping (prop: ISetProp<'T>) =
-    { new ISetProp<'U> with
-        member _.OnNext(value) = prop.OnNext(mapping value) }
-
-[<CompiledName("MapSet")>]
-let map2Set mapping (prop1: ISetProp<'T1>) (prop2: ISetProp<'T2>) =
-    { new ISetProp<'U> with
-        member _.OnNext(value) =
-            let v1, v2 = mapping value
-            prop1.OnNext(v1)
-            prop2.OnNext(v2)
-    }
-
-[<CompiledName("MapSet")>]
-let map3Set mapping (prop1: ISetProp<'T1>) (prop2: ISetProp<'T2>) (prop3: ISetProp<'T3>) =
-    { new ISetProp<'U> with
-        member _.OnNext(value) =
-            let v1, v2, v3 = mapping value
-            prop1.OnNext(v1)
-            prop2.OnNext(v2)
-            prop3.OnNext(v3)
-    }
-
-[<CompiledName("FilterSet")>]
-let filterSet pred (prop: ISetProp<'T>) =
-    { new ISetProp<'T> with
-        member _.OnNext(value) = if pred value then prop.OnNext(value) }
 
 // == both way ======================================================================
 
@@ -190,67 +131,69 @@ let filterSet pred (prop: ISetProp<'T>) =
 let value init = ValueProp<'T>(init)
 
 [<CompiledName("WithSet")>]
-let withSet (setter: ISetProp<'T>) (getter: IGetProp<'T>) =
-    { new IProp<'T> with
-        member _.Value = getter.Value
-        member _.Subscribe(onNext) = getter.Subscribe(onNext)
-        member _.OnNext(value) = setter.OnNext(value) }
+let withSet (setter: IObserver<'T>) (getter: IGetProp<'T>) = DelegationProp(setter, getter) :> IProp<_>
 
 [<CompiledName("WithGet")>]
-let withGet (getter: IGetProp<'T>) (setter: ISetProp<'T>) =
-    { new IProp<'T> with
-        member _.Value = getter.Value
-        member _.Subscribe(onNext) = getter.Subscribe(onNext)
-        member _.OnNext(value) = setter.OnNext(value) }
+let withGet (getter: IGetProp<'T>) (setter: IObserver<'T>) = withSet setter getter
 
 [<CompiledName("Modify")>]
 let modify f (prop: IProp<'T>) = prop.OnNext(f prop.Value)
 
 [<CompiledName("MapBoth")>]
 let mapBoth getMapping setMapping (prop: IProp<'T>) =
-    { new IProp<'U> with
+    { new BasicProp<'U>() with
         member _.Value = getMapping prop.Value
-        member _.Subscribe(onNext) = prop.Subscribe(getMapping >> onNext)
-        member _.OnNext(value) = prop.OnNext(setMapping value) }
+        member _.Subscribe(observer) = (observer, prop) ||> mapSubsc getMapping
+        member _.OnNext(value) = prop.OnNext(setMapping value)
+        member _.OnCompleted() = prop.OnCompleted()
+        member _.OnError(error) = prop.OnError(error)
+    } :> IProp<_>
 
 [<CompiledName("MapBoth")>]
 let map2Both getMapping setMapping (prop1: IProp<'T1>) (prop2: IProp<'T2>) =
-    { new IProp<'U> with
+    { new BasicProp<'U>() with
         member _.Value = getMapping prop1.Value prop2.Value
-        member _.Subscribe(onNext) =
+        member _.Subscribe(observer) =
             Disposable.collect [|
-                prop1.Subscribe(fun value -> onNext (getMapping value prop2.Value))
-                prop2.Subscribe(fun value -> onNext (getMapping prop1.Value value))
+                (observer, prop1) ||> mapSubsc(fun value -> getMapping value prop2.Value)
+                (observer, prop2) ||> mapSubsc(fun value -> getMapping prop1.Value value)
             |]
         member _.OnNext(value) =
             let v1, v2 = setMapping value
             prop1.OnNext(v1)
             prop2.OnNext(v2)
-    }
+        member _.OnCompleted() =
+            prop1.OnCompleted()
+            prop2.OnCompleted()
+        member _.OnError(error) =
+            prop1.OnError(error)
+            prop2.OnError(error)
+    } :> IProp<_>
 
 [<CompiledName("MapBoth")>]
 let map3Both getMapping setMapping (prop1: IProp<'T1>) (prop2: IProp<'T2>) (prop3: IProp<'T3>) =
-    { new IProp<'U> with
+    { new BasicProp<'U>() with
         member _.Value = getMapping prop1.Value prop2.Value prop3.Value
-        member _.Subscribe(onNext) =
+        member _.Subscribe(observer) =
             Disposable.collect [|
-                prop1.Subscribe(fun value -> onNext (getMapping value prop2.Value prop3.Value))
-                prop2.Subscribe(fun value -> onNext (getMapping prop1.Value value prop3.Value))
-                prop3.Subscribe(fun value -> onNext (getMapping prop1.Value prop2.Value value))
+                (observer, prop1) ||> mapSubsc(fun value -> getMapping value prop2.Value prop3.Value)
+                (observer, prop2) ||> mapSubsc(fun value -> getMapping prop1.Value value prop3.Value)
+                (observer, prop3) ||> mapSubsc(fun value -> getMapping prop1.Value prop2.Value value)
             |]
         member _.OnNext(value) =
             let v1, v2, v3 = setMapping value
             prop1.OnNext(v1)
             prop2.OnNext(v2)
             prop3.OnNext(v3)
-    }
-
-[<CompiledName("CacheBoth")>]
-let cacheBoth (prop: IProp<'T>) =
-    let p = ValueProp(prop.Value)
-    Operators.ignore (prop.Subscribe(p.OnNext))
-    Operators.ignore (p.Subscribe(prop.OnNext))
-    p :> IProp<'T>
+        member _.OnCompleted() =
+            prop1.OnCompleted()
+            prop2.OnCompleted()
+            prop3.OnCompleted()
+        member _.OnError(error) =
+            prop1.OnError(error)
+            prop2.OnError(error)
+            prop3.OnError(error)
+    } :> IProp<_>
 
 [<CompiledName("ZipBoth")>]
 let zipBoth (prop1: IProp<'T1>) (prop2: IProp<'T2>) =
@@ -264,15 +207,21 @@ let zip3Both (prop1: IProp<'T1>) (prop2: IProp<'T2>) (prop3: IProp<'T3>) =
 let unzipBoth (prop: IProp<'T1 * 'T2>) =
     let mutable r2 = Unchecked.defaultof<IProp<'T2>>
     let r1 =
-       { new IProp<'T1> with
+       { new BasicProp<'T1>() with
            member _.Value = fst prop.Value
-           member _.Subscribe(onNext) = prop.Subscribe(fst >> onNext)
-           member _.OnNext(value) = prop.OnNext(value, r2.Value) }
+           member _.Subscribe(observer) = (observer, prop) ||> mapSubsc fst
+           member _.OnNext(value) = prop.OnNext(value, r2.Value)
+           member _.OnCompleted() = prop.OnCompleted()
+           member _.OnError(error) = prop.OnError(error)
+       } :> IProp<_>
     r2 <-
-        { new IProp<'T2> with
+        { new BasicProp<'T2>() with
             member _.Value = snd prop.Value
-            member _.Subscribe(onNext) = prop.Subscribe(snd >> onNext)
-            member _.OnNext(value) = prop.OnNext(r1.Value, value) }
+            member _.Subscribe(observer) = (observer, prop) ||> mapSubsc snd
+            member _.OnNext(value) = prop.OnNext(r1.Value, value)
+            member _.OnCompleted() = prop.OnCompleted()
+            member _.OnError(error) = prop.OnError(error)
+        } :> IProp<_>
     r1, r2
 
 [<CompiledName("UnzipBoth")>]
@@ -280,62 +229,53 @@ let unzip3Both (prop: IProp<'T1 * 'T2 * 'T3>) =
     let mutable r2 = Unchecked.defaultof<IProp<'T2>>
     let mutable r3 = Unchecked.defaultof<IProp<'T3>>
     let r1 =
-       { new IProp<'T1> with
+       { new BasicProp<'T1>() with
            member _.Value = fst3 prop.Value
-           member _.Subscribe(onNext) = prop.Subscribe(fst3 >> onNext)
-           member _.OnNext(value) = prop.OnNext(value, r2.Value, r3.Value) }
+           member _.Subscribe(observer) = (observer, prop) ||> mapSubsc fst3
+           member _.OnNext(value) = prop.OnNext(value, r2.Value, r3.Value)
+           member _.OnCompleted() = prop.OnCompleted()
+           member _.OnError(error) = prop.OnError(error)
+       } :> IProp<_>
     r2 <-
-        { new IProp<'T2> with
+        { new BasicProp<'T2>() with
             member _.Value = snd3 prop.Value
-            member _.Subscribe(onNext) = prop.Subscribe(snd3 >> onNext)
-            member _.OnNext(value) = prop.OnNext(r1.Value, value, r3.Value) }
+            member _.Subscribe(observer) = (observer, prop) ||> mapSubsc snd3
+            member _.OnNext(value) = prop.OnNext(r1.Value, value, r3.Value)
+            member _.OnCompleted() = prop.OnCompleted()
+            member _.OnError(error) = prop.OnError(error)
+        } :> IProp<_>
     r3 <-
-        { new IProp<'T3> with
+        { new BasicProp<'T3>() with
             member _.Value = thd3 prop.Value
-            member _.Subscribe(onNext) = prop.Subscribe(thd3 >> onNext)
-            member _.OnNext(value) = prop.OnNext(r1.Value, r2.Value, value) }
+            member _.Subscribe(observer) = (observer, prop) ||> mapSubsc thd3
+            member _.OnNext(value) = prop.OnNext(r1.Value, r2.Value, value)
+            member _.OnCompleted() = prop.OnCompleted()
+            member _.OnError(error) = prop.OnError(error)
+        } :> IProp<_>
     r1, r2, r3
 
-// == notifications ======================================================================
-
-[<CompiledName("NotifyValue")>]
-let valuen init = NotifyProp(ValueProp<'T>(init))
-
-[<CompiledName("ToReadOnlyNotify")>]
-let notifyGet (prop: IGetProp<'T>) = NotifyGetProp(prop)
-
-[<CompiledName("ToNotify")>]
-let notify (prop: IProp<'T>) = NotifyProp(prop)
-
-[<CompiledName("NotifyWithGet")>]
-let notifyWithGet (getter: IGetProp<'T>) (setter: ISetProp<'T>) = NotifyProp(getter, setter)
-
-[<CompiledName("NotifyWithSet")>]
-let notifyWithSet (setter: ISetProp<'T>) (getter: IGetProp<'T>) = NotifyProp(getter, setter)
+// == command ======================================================================
 
 [<CompiledName("ToCommand")>]
 let command onExecute canExecute = Command(onExecute, canExecute) :> ICommand
 
 [<CompiledName("ToCommand")>]
 let commandp canExecute =
-    let valueProp = ValueProp(null)
-    Command(valueProp.OnNext, canExecute) :> ICommand, valueProp :> IGetProp<obj>
+    let subject = Subject()
+    Command(subject.OnNext, canExecute) :> ICommand, Observable.asObservable subject
     
 // == pure operator mapping ======================================================================
     
-[<CompiledName("Increment")>]
+[<CompiledName("Increment"); Extension>]
 let incr (prop: IProp<int>) = prop.OnNext(prop.Value + 1)
 
-[<CompiledName("Decrement")>]
+[<CompiledName("Decrement"); Extension>]
 let decr (prop: IProp<int>) = prop.OnNext(prop.Value - 1)
 
-[<CompiledName("Not")>]
+[<CompiledName("Not"); Extension>]
 let not prop = map not prop
 
-[<CompiledName("NotSet")>]
-let notSet prop = mapSet Operators.not prop
-
-[<CompiledName("NotBoth")>]
+[<CompiledName("NotBoth"); Extension>]
 let notBoth prop = mapBoth Operators.not Operators.not prop
 
 [<CompiledName("Ignore")>]
