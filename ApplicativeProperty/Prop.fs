@@ -49,7 +49,7 @@ type Subject<'T>() =
         member this.Subscribe(observer) = this.Subscribe(observer)
 
 
-type ValueProp<'T>(init: 'T) =
+type ValueProp<'T>(init: 'T, comparer: IEqualityComparer<'T>) =
     let mutable backField = init
     let observers = ResizeArray<ObserverHolder<'T>>()
     let events = PropertyChangedEventHolder<'T>(ResizeArray())
@@ -62,13 +62,19 @@ type ValueProp<'T>(init: 'T) =
         holder :> IDisposable
 
     member _.OnNext(value) =
-        if not (EqualityComparer<'T>.Default.Equals(backField, value)) then
+        if not (comparer.Equals(backField, value)) then
             backField <- value
             for holder in observers do holder.Observer.OnNext(value)
 
     member _.OnCompleted() = for holder in observers do holder.Observer.OnCompleted()
 
     member _.OnError(error) = for holder in observers do holder.Observer.OnError(error)
+
+    new(init: 'T) = ValueProp(init, EqualityComparer.Default)
+    new(init: 'T, compare: 'T -> 'T -> bool) = ValueProp(init, { new IEqualityComparer<'T> with
+            member _.Equals(x, y) = compare x y
+            member _.GetHashCode(_) = 0 // not used
+        })
 
     interface IProp<'T> with
         member this.Value = this.Value
@@ -92,7 +98,7 @@ type ConstProp<'T>(init: 'T) =
         member _.remove_PropertyChanged(_) = ()
 
 
-type ObserverProp<'T>(init: 'T) =
+type ObserverProp<'T>(init: 'T, comparer: IEqualityComparer<'T>) =
     let mutable backField = init
     let observers = ResizeArray<ObserverHolder<'T>>()
     let events = PropertyChangedEventHolder<'T>(ResizeArray())
@@ -100,7 +106,7 @@ type ObserverProp<'T>(init: 'T) =
     let selfObserver =
         { new IObserver<'T> with
             member _.OnNext(value) =
-                if not (EqualityComparer<'T>.Default.Equals(backField, value)) then
+                if not (comparer.Equals(backField, value)) then
                     backField <- value
                     for holder in observers do holder.Observer.OnNext(value)
             member _.OnCompleted() = for holder in observers do holder.Observer.OnCompleted()
@@ -117,6 +123,12 @@ type ObserverProp<'T>(init: 'T) =
         holder :> IDisposable
 
     member _.Dispose() = disposables.Dispose()
+
+    new(init: 'T) = new ObserverProp<'T>(init, EqualityComparer.Default)
+    new(init: 'T, compare: 'T -> 'T -> bool) = new ObserverProp<'T>(init, { new IEqualityComparer<'T> with
+            member _.Equals(x, y) = compare x y
+            member _.GetHashCode(_) = 0 // not used
+        })
 
     interface IGetProp<'T> with
         member this.Value = this.Value
