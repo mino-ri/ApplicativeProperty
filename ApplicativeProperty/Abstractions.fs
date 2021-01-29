@@ -1,5 +1,7 @@
 ﻿namespace ApplicativeProperty
 open System
+open System.Collections.Generic
+open System.Collections.Specialized
 open System.ComponentModel
 
 type ISubject<'T> =
@@ -18,3 +20,8 @@ type IProp<'T> =
 type IDisposableGetProp<'T> =
     inherit IGetProp<'T>
     inherit IDisposable
+
+type IReactiveCollection<'T> =
+    inherit IObservable<CollectionChange<'T>>
+    inherit INotifyCollectionChanged
+    inherit IReadOnlyList<'T>

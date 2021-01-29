@@ -10,12 +10,6 @@ let subscribe2 callback (source: IObservable<'T>) =
         member _.OnNext(value) = callback value
         member _.OnCompleted() = ()
         member _.OnError(error) = raise error })
-
-[<CompiledName("ToProp")>]
-let toProp init source =
-    let prop = new ObserverProp<'T>(init)
-    prop.Observe(source)
-    prop
     
 [<CompiledName("AsObservable"); Extension>]
 let asObservable (source: IObservable<'T>) =

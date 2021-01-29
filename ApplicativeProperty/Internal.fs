@@ -1,6 +1,8 @@
 ﻿[<AutoOpen>]
 module internal ApplicativeProperty.Internal
 open System
+open System.Collections
+open System.Collections.Generic
 
 let fst3 (x, _, _) = x
 
@@ -35,6 +37,23 @@ let inline func3 (f: Func<_, _, _, _>) x y z = f.Invoke(x, y, z)
 let inline tuple2 (f: Func<_, struct(_ * _)>) x = let struct(y, z) = f.Invoke(x) in y, z
 
 let inline tuple3 (f: Func<_, struct(_ * _ * _)>) x = let struct(y, z, w) = f.Invoke(x) in y, z, w
+
+
+type MappingList<'T, 'U>(mapping: 'T -> 'U, source: IReadOnlyList<'T>) =
+    let x = 0
+    interface IReadOnlyList<'U> with
+        member _.Count = source.Count
+        member _.Item with get(index) = mapping source.[index]
+        member this.GetEnumerator() : IEnumerator =
+            (this :> IReadOnlyList<'U>).GetEnumerator() :> IEnumerator
+        member _.GetEnumerator() : IEnumerator<'U> =
+            let inner = source.GetEnumerator()
+            { new IEnumerator<'U> with
+                member _.Current: 'U = mapping inner.Current
+                member _.Current: obj = box (mapping inner.Current)
+                member _.Dispose() = inner.Dispose()
+                member _.MoveNext() = inner.MoveNext()
+                member _.Reset() = inner.Reset() }
 
 
 [<AbstractClass>]

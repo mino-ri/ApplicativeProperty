@@ -12,14 +12,17 @@
   <ItemGroup>
     <Compile Include="Internal.fs" />
     <Compile Include="Disposable.fs" />
-    <Compile Include="Abstractions.fs" />
-    <Compile Include="ValueProp.fs" />
-    <Compile Include="Command.fs" />
-    <Compile Include="Observable.fs" />
-    <Compile Include="Prop.fs" />
-    <Compile Include="PropOperators.fs" />
+    <Compile Include="ObservableModule.fs" />
     <Compile Include="ObservableExtensions.fs" />
+    <Compile Include="CollectionChange.fs" />
+    <Compile Include="Abstractions.fs" />
+    <Compile Include="Prop.fs" />
+    <Compile Include="Command.fs" />
+    <Compile Include="PropModule.fs" />
     <Compile Include="PropExtensions.fs" />
+    <Compile Include="PropOperators.fs" />
+    <Compile Include="ReactiveCollection.fs" />
+    <Compile Include="ReactiveCollectionModule.fs" />
   </ItemGroup>
 
 </Project>
