@@ -25,3 +25,4 @@ type IReactiveCollection<'T> =
     inherit IObservable<CollectionChange<'T>>
     inherit INotifyCollectionChanged
     inherit IReadOnlyList<'T>
+    abstract member CountProp : IGetProp<int>

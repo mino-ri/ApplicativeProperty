@@ -2,18 +2,22 @@
 open System
 open System.Collections.Generic
 open System.ComponentModel
+open System.Threading
 
 
 type internal PropertyChangedEventHolder<'T>(eventDisposers: ResizeArray<struct(PropertyChangedEventHandler * IDisposable)>) =
     struct
-        member _.Add(handler: PropertyChangedEventHandler, target : IObservable<'T>) =
-            let disposer = target.Subscribe(fun _ -> handler.Invoke(target, PropertyChangedEventArgs("Value")))
+        member _.Add(handler: PropertyChangedEventHandler, target : IObservable<'T>, context: SynchronizationContext) =
+            if isNull context then nullArg (nameof context)
+            let disposer = target.Subscribe(fun _ ->
+                context.Post(SendOrPostCallback(fun _ ->
+                    handler.Invoke(target, PropertyChangedEventArgs("Value"))), null))
             eventDisposers.Add(handler, disposer)
 
         member _.Remove(handler: PropertyChangedEventHandler) =
             let index = eventDisposers.FindIndex(0, fun struct(eh, _) -> eh = handler)
             match eventDisposers.[index] with (_, d) -> d.Dispose()
-            eventDisposers.RemoveAt(index)           
+            eventDisposers.RemoveAt(index)
     end
 
 
@@ -49,7 +53,7 @@ type Subject<'T>() =
         member this.Subscribe(observer) = this.Subscribe(observer)
 
 
-type ValueProp<'T>(init: 'T, comparer: IEqualityComparer<'T>) =
+type ValueProp<'T>(init: 'T, comparer: IEqualityComparer<'T>, context: SynchronizationContext) =
     let mutable backField = init
     let observers = ResizeArray<ObserverHolder<'T>>()
     let events = PropertyChangedEventHolder<'T>(ResizeArray())
@@ -70,11 +74,12 @@ type ValueProp<'T>(init: 'T, comparer: IEqualityComparer<'T>) =
 
     member _.OnError(error) = for holder in observers do holder.Observer.OnError(error)
 
-    new(init: 'T) = ValueProp(init, EqualityComparer.Default)
+    new(init: 'T) = ValueProp(init, EqualityComparer.Default, SynchronizationContext.Current)
+    new(init: 'T, context: SynchronizationContext) = ValueProp(init, EqualityComparer.Default, context)
     new(init: 'T, compare: 'T -> 'T -> bool) = ValueProp(init, { new IEqualityComparer<'T> with
             member _.Equals(x, y) = compare x y
             member _.GetHashCode(_) = 0 // not used
-        })
+        }, SynchronizationContext.Current)
 
     interface IProp<'T> with
         member this.Value = this.Value
@@ -82,7 +87,7 @@ type ValueProp<'T>(init: 'T, comparer: IEqualityComparer<'T>) =
         member this.OnCompleted() = this.OnCompleted()
         member this.OnError(error) = this.OnError(error)
         member this.Subscribe(onNext) = this.Subscribe(onNext)
-        member this.add_PropertyChanged(handler) = events.Add(handler, this)
+        member this.add_PropertyChanged(handler) = events.Add(handler, this, context)
         member _.remove_PropertyChanged(handler) = events.Remove(handler)
 
 
@@ -98,7 +103,7 @@ type ConstProp<'T>(init: 'T) =
         member _.remove_PropertyChanged(_) = ()
 
 
-type ObserverProp<'T>(init: 'T, comparer: IEqualityComparer<'T>) =
+type ObserverProp<'T>(init: 'T, comparer: IEqualityComparer<'T>, context: SynchronizationContext) =
     let mutable backField = init
     let observers = ResizeArray<ObserverHolder<'T>>()
     let events = PropertyChangedEventHolder<'T>(ResizeArray())
@@ -124,16 +129,17 @@ type ObserverProp<'T>(init: 'T, comparer: IEqualityComparer<'T>) =
 
     member _.Dispose() = disposables.Dispose()
 
-    new(init: 'T) = new ObserverProp<'T>(init, EqualityComparer.Default)
+    new(init: 'T) = new ObserverProp<'T>(init, EqualityComparer.Default, SynchronizationContext.Current)
+    new(init: 'T, context: SynchronizationContext) = new ObserverProp<'T>(init, EqualityComparer.Default, context)
     new(init: 'T, compare: 'T -> 'T -> bool) = new ObserverProp<'T>(init, { new IEqualityComparer<'T> with
             member _.Equals(x, y) = compare x y
             member _.GetHashCode(_) = 0 // not used
-        })
+        }, SynchronizationContext.Current)
 
     interface IGetProp<'T> with
         member this.Value = this.Value
         member this.Subscribe(onNext) = this.Subscribe(onNext)
-        member this.add_PropertyChanged(handler) = events.Add(handler, this)
+        member this.add_PropertyChanged(handler) = events.Add(handler, this, context)
         member _.remove_PropertyChanged(handler) = events.Remove(handler)
 
     interface IDisposable with
@@ -142,11 +148,12 @@ type ObserverProp<'T>(init: 'T, comparer: IEqualityComparer<'T>) =
 
 type internal DelegationProp<'T>(observer: IObserver<'T>, prop: IGetProp<'T>) =
     let events = PropertyChangedEventHolder<'T>(ResizeArray())
+    let context = SynchronizationContext.Current
     interface IProp<'T> with
         member _.Value = prop.Value
         member _.OnNext(value) = observer.OnNext(value)
         member _.OnCompleted() = observer.OnCompleted()
         member _.OnError(error) = observer.OnError(error)
         member _.Subscribe(onNext) = prop.Subscribe(onNext)
-        member this.add_PropertyChanged(handler) = events.Add(handler, this)
+        member this.add_PropertyChanged(handler) = events.Add(handler, this, context)
         member _.remove_PropertyChanged(handler) = events.Remove(handler)

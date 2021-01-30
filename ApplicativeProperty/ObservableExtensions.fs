@@ -6,6 +6,9 @@ open System.Runtime.CompilerServices
 type ObservableExtensions() =
 
     [<Extension>]
+    static member Subscribe(source, callBack: Action<'T>) = Observable.subscribe2 (action1 callBack) source
+
+    [<Extension>]
     static member Select(source, selector: Func<'T, 'U>) = Observable.map selector.Invoke source
 
     [<Extension>]

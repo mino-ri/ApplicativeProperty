@@ -11,6 +11,9 @@ type PropExtensions =
         getProp.Subscribe(action1 onNext)
 
     [<Extension>]
+    static member Fetch(prop: IGetProp<'T>, context) = Prop.fetch context prop
+
+    [<Extension>]
     static member Select(prop, selector: Func<'T, 'U>) = Prop.map selector.Invoke prop
 
     [<Extension>]
@@ -66,3 +69,11 @@ type PropExtensions =
     static member ToCommand(canExecute) =
         let subject = Subject()
         struct(Command(subject.OnNext, canExecute) :> ICommand, Observable.asObservable subject)
+
+    [<Extension>]
+    static member ToCommand(canExecute, onExecute: Action<obj>, context) = Command(onExecute.Invoke, canExecute, context) :> ICommand
+
+    [<Extension>]
+    static member ToCommand(canExecute, context) =
+        let subject = Subject()
+        struct(Command(subject.OnNext, canExecute, context) :> ICommand, Observable.asObservable subject)

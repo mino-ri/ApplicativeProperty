@@ -2,19 +2,21 @@
 module ApplicativeProperty.Prop
 open System
 open System.Runtime.CompilerServices
+open System.Threading
 open System.Windows.Input
 
 
 [<AbstractClass>]
-type private BasicGetProp<'T>() =
+type private BasicGetProp<'T>(context: SynchronizationContext) =
     let events = PropertyChangedEventHolder<'T>(ResizeArray())
     abstract member Value : 'T
     abstract member Subscribe : observer: IObserver<'T> -> IDisposable
     interface IGetProp<'T> with
         member this.Value = this.Value
         member this.Subscribe(onNext) = this.Subscribe(onNext)
-        member this.add_PropertyChanged(handler) = events.Add(handler, this)
+        member this.add_PropertyChanged(handler) = events.Add(handler, this, context)
         member _.remove_PropertyChanged(handler) = events.Remove(handler)
+    new() = BasicGetProp<'T>(SynchronizationContext.Current)
 
 
 [<AbstractClass>]
@@ -44,6 +46,16 @@ let asGet (prop: IGetProp<'T>) =
         member _.Value = prop.Value
         member _.Subscribe(observer) = prop.Subscribe(observer)
     } :> IGetProp<_>
+
+[<CompiledName("Fetch")>]
+let fetch context (prop: IGetProp<'T>) =
+    { new BasicGetProp<'T>(context) with
+        member _.Value = prop.Value
+        member _.Subscribe(observer) = prop.Subscribe(observer)
+    } :> IGetProp<_>
+
+[<CompiledName("Fetch"); Extension>]
+let fetchCurrent (prop: IGetProp<'T>) = fetch SynchronizationContext.Current prop
 
 [<CompiledName("Map")>]
 let map mapping (prop: IGetProp<'T>) =
@@ -114,7 +126,6 @@ let apply (funcProp: IGetProp<'T -> 'U>) argProp =
 [<CompiledName("Apply")>]
 let apply2 (funcProp: IGetProp<'T1 -> 'T2 -> 'U>) argProp1 argProp2 =
     map3 (fun f a b -> f a b) funcProp argProp1 argProp2
-
 
 type GetPropBuilder() =
     member __.MergeSources(t1, t2) : IGetProp<'T1 * 'T2> = zip t1 t2
@@ -264,6 +275,14 @@ let commandp canExecute =
     let subject = Subject()
     Command(subject.OnNext, canExecute) :> ICommand, Observable.asObservable subject
     
+[<CompiledName("ToCommand")>]
+let commands onExecute canExecute context = Command(onExecute, canExecute, context) :> ICommand
+
+[<CompiledName("ToCommand")>]
+let commandps canExecute context =
+    let subject = Subject()
+    Command(subject.OnNext, canExecute, context) :> ICommand, Observable.asObservable subject
+
 // == pure operator mapping ======================================================================
     
 [<CompiledName("Increment"); Extension>]

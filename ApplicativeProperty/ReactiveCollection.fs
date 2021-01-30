@@ -3,13 +3,15 @@ open System
 open System.Collections
 open System.Collections.Generic
 open System.Collections.Specialized
+open System.Threading
 
 
 type internal CollectionChangedEventHolder<'T>(eventDisposers: ResizeArray<struct(NotifyCollectionChangedEventHandler * IDisposable)>) =
     struct
-        member _.Add(handler: NotifyCollectionChangedEventHandler, target : IObservable<CollectionChange<'T>>) =
+        member _.Add(handler: NotifyCollectionChangedEventHandler, target : IObservable<CollectionChange<'T>>, context: SynchronizationContext) =
             let disposer = target.Subscribe({ new BasicObserver<_>() with
-                member _.OnNext(value) = for e in CollectionChange.toEventArgs value do handler.Invoke(target, e)
+                member _.OnNext(value) = context.Post(SendOrPostCallback(fun _ ->
+                    for e in CollectionChange.toEventArgs value do handler.Invoke(target, e)), null)
                 member _.OnCompleted() = ()
                 member _.OnError(error) = raise error })
             eventDisposers.Add(handler, disposer)
@@ -21,12 +23,12 @@ type internal CollectionChangedEventHolder<'T>(eventDisposers: ResizeArray<struc
     end
 
 
-type ReactiveCollection<'T> private (inner: ResizeArray<'T>) =
+type ReactiveCollection<'T> private (inner: ResizeArray<'T>, context: SynchronizationContext) =
     let observers = ResizeArray<ObserverHolder<CollectionChange<'T>>>()
     let events = CollectionChangedEventHolder<'T>(ResizeArray())
-    let countPop = ValueProp(0)
+    let countProp = ValueProp(inner.Count)
 
-    member val CountProp = Prop.asGet countPop
+    member val CountProp = Prop.asGet countProp
 
     member this.Count = this.CountProp.Value
 
@@ -36,7 +38,7 @@ type ReactiveCollection<'T> private (inner: ResizeArray<'T>) =
 
     member private _.OnNext(collectionChange) =
         for holder in observers do holder.Observer.OnNext(collectionChange)
-        countPop.OnNext(inner.Count)
+        countProp.OnNext(inner.Count)
 
     member _.Subscribe(onNext) =
         let holder = new ObserverHolder<_>(observers, onNext)
@@ -85,15 +87,18 @@ type ReactiveCollection<'T> private (inner: ResizeArray<'T>) =
 
     member _.GetEnumerator() = inner.GetEnumerator()
     
-    new() = ReactiveCollection(ResizeArray<'T>())
-    new(capacity: int) = ReactiveCollection(ResizeArray(capacity))
-    new(source: seq<'T>) = ReactiveCollection(ResizeArray(source))
+    new() = ReactiveCollection(ResizeArray<'T>(), SynchronizationContext.Current)
+    new(context: SynchronizationContext) = ReactiveCollection(ResizeArray<'T>(), context)
+    new(capacity: int) = ReactiveCollection(ResizeArray(capacity), SynchronizationContext.Current)
+    new(source: seq<'T>) = ReactiveCollection(ResizeArray(source), SynchronizationContext.Current)
+    new(source: seq<'T>, context: SynchronizationContext) = ReactiveCollection(ResizeArray(source), context)
 
     interface IReactiveCollection<'T> with
         member _.GetEnumerator() : IEnumerator = (inner :> IEnumerable).GetEnumerator()
         member _.GetEnumerator() : IEnumerator<'T> = (inner :> IEnumerable<'T>).GetEnumerator()
         member _.Count = inner.Count
+        member this.CountProp = this.CountProp
         member _.Item with get(index) = inner.[index]
         member this.Subscribe(observer) = this.Subscribe(observer)
-        member this.add_CollectionChanged(handler) = events.Add(handler, this)
+        member this.add_CollectionChanged(handler) = events.Add(handler, this, context)
         member _.remove_CollectionChanged(handler) = events.Remove(handler)
