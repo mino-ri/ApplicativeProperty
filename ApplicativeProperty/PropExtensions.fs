@@ -63,6 +63,9 @@ type PropExtensions =
         Prop.map3Both (func3 getSelector) (tuple3 setSelector) prop1 prop2 prop3
 
     [<Extension>]
+    static member FetchBoth(prop: IProp<'T>, context) = Prop.fetchBoth context prop
+
+    [<Extension>]
     static member ToCommand(canExecute, onExecute: Action<obj>) = Command(onExecute.Invoke, canExecute) :> ICommand
 
     [<Extension>]

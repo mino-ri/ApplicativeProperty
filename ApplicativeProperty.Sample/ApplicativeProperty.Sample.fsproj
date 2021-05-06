@@ -4,6 +4,7 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net5.0-windows</TargetFramework>
     <UseWPF>true</UseWPF>
+    <EnableDefaultPageItems>false</EnableDefaultPageItems>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
@@ -12,18 +13,21 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="LoadExtension.fs" />
     <Compile Include="ViewModel.fs" />
     <Compile Include="AssemblyInfo.fs" />
+    <Compile Include="ValueControl.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\ApplicativeProperty\ApplicativeProperty.fsproj" />
+    <Resource Include="App.xaml" />
+    <Resource Include="MyUserControl.xaml" />
+    <Resource Include="MainWindow.xaml" />
   </ItemGroup>
 
   <ItemGroup>
-    <Resource Include="App.xaml" />
-    <Resource Include="MainWindow.xaml" />
+    <ProjectReference Include="..\ApplicativeProperty\ApplicativeProperty.fsproj" />
   </ItemGroup>
 
 </Project>

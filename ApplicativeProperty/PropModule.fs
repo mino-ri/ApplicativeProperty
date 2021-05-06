@@ -7,7 +7,7 @@ open System.Windows.Input
 
 
 [<AbstractClass>]
-type private BasicGetProp<'T>(context: SynchronizationContext) =
+type BasicGetProp<'T>(context: SynchronizationContext) =
     let events = PropertyChangedEventHolder<'T>(ResizeArray())
     abstract member Value : 'T
     abstract member Subscribe : observer: IObserver<'T> -> IDisposable
@@ -20,15 +20,23 @@ type private BasicGetProp<'T>(context: SynchronizationContext) =
 
 
 [<AbstractClass>]
-type private BasicProp<'T>() =
-    inherit BasicGetProp<'T>()
+type BasicProp<'T>(context: SynchronizationContext) =
+    let events = PropertyChangedEventHolder<'T>(ResizeArray())
+    abstract member GetValue : unit -> 'T
+    abstract member Subscribe : observer: IObserver<'T> -> IDisposable
     abstract member OnNext : 'T -> unit
     abstract member OnCompleted : unit -> unit
     abstract member OnError : exn -> unit
+    member this.Value with get() = this.GetValue() and set v = this.OnNext(v)
     interface IProp<'T> with
+        member this.Value = this.Value
+        member this.Subscribe(onNext) = this.Subscribe(onNext)
         member this.OnNext(value) = this.OnNext(value)
         member this.OnError(error) = this.OnError(error)
         member this.OnCompleted() = this.OnCompleted()
+        member this.add_PropertyChanged(handler) = events.Add(handler, this, context)
+        member _.remove_PropertyChanged(handler) = events.Remove(handler)
+    new() = BasicProp<'T>(SynchronizationContext.Current)
 
 
 [<CompiledName("Constant")>]
@@ -153,7 +161,7 @@ let modify f (prop: IProp<'T>) = prop.OnNext(f prop.Value)
 [<CompiledName("MapBoth")>]
 let mapBoth getMapping setMapping (prop: IProp<'T>) =
     { new BasicProp<'U>() with
-        member _.Value = getMapping prop.Value
+        member _.GetValue() = getMapping prop.Value
         member _.Subscribe(observer) = (observer, prop) ||> mapSubsc getMapping
         member _.OnNext(value) = prop.OnNext(setMapping value)
         member _.OnCompleted() = prop.OnCompleted()
@@ -163,7 +171,7 @@ let mapBoth getMapping setMapping (prop: IProp<'T>) =
 [<CompiledName("MapBoth")>]
 let map2Both getMapping setMapping (prop1: IProp<'T1>) (prop2: IProp<'T2>) =
     { new BasicProp<'U>() with
-        member _.Value = getMapping prop1.Value prop2.Value
+        member _.GetValue() = getMapping prop1.Value prop2.Value
         member _.Subscribe(observer) =
             Disposable.collect [|
                 (observer, prop1) ||> mapSubsc(fun value -> getMapping value prop2.Value)
@@ -184,7 +192,7 @@ let map2Both getMapping setMapping (prop1: IProp<'T1>) (prop2: IProp<'T2>) =
 [<CompiledName("MapBoth")>]
 let map3Both getMapping setMapping (prop1: IProp<'T1>) (prop2: IProp<'T2>) (prop3: IProp<'T3>) =
     { new BasicProp<'U>() with
-        member _.Value = getMapping prop1.Value prop2.Value prop3.Value
+        member _.GetValue() = getMapping prop1.Value prop2.Value prop3.Value
         member _.Subscribe(observer) =
             Disposable.collect [|
                 (observer, prop1) ||> mapSubsc(fun value -> getMapping value prop2.Value prop3.Value)
@@ -219,7 +227,7 @@ let unzipBoth (prop: IProp<'T1 * 'T2>) =
     let mutable r2 = Unchecked.defaultof<IProp<'T2>>
     let r1 =
        { new BasicProp<'T1>() with
-           member _.Value = fst prop.Value
+           member _.GetValue() = fst prop.Value
            member _.Subscribe(observer) = (observer, prop) ||> mapSubsc fst
            member _.OnNext(value) = prop.OnNext(value, r2.Value)
            member _.OnCompleted() = prop.OnCompleted()
@@ -227,7 +235,7 @@ let unzipBoth (prop: IProp<'T1 * 'T2>) =
        } :> IProp<_>
     r2 <-
         { new BasicProp<'T2>() with
-            member _.Value = snd prop.Value
+            member _.GetValue() = snd prop.Value
             member _.Subscribe(observer) = (observer, prop) ||> mapSubsc snd
             member _.OnNext(value) = prop.OnNext(r1.Value, value)
             member _.OnCompleted() = prop.OnCompleted()
@@ -241,7 +249,7 @@ let unzip3Both (prop: IProp<'T1 * 'T2 * 'T3>) =
     let mutable r3 = Unchecked.defaultof<IProp<'T3>>
     let r1 =
        { new BasicProp<'T1>() with
-           member _.Value = fst3 prop.Value
+           member _.GetValue() = fst3 prop.Value
            member _.Subscribe(observer) = (observer, prop) ||> mapSubsc fst3
            member _.OnNext(value) = prop.OnNext(value, r2.Value, r3.Value)
            member _.OnCompleted() = prop.OnCompleted()
@@ -249,7 +257,7 @@ let unzip3Both (prop: IProp<'T1 * 'T2 * 'T3>) =
        } :> IProp<_>
     r2 <-
         { new BasicProp<'T2>() with
-            member _.Value = snd3 prop.Value
+            member _.GetValue() = snd3 prop.Value
             member _.Subscribe(observer) = (observer, prop) ||> mapSubsc snd3
             member _.OnNext(value) = prop.OnNext(r1.Value, value, r3.Value)
             member _.OnCompleted() = prop.OnCompleted()
@@ -257,14 +265,20 @@ let unzip3Both (prop: IProp<'T1 * 'T2 * 'T3>) =
         } :> IProp<_>
     r3 <-
         { new BasicProp<'T3>() with
-            member _.Value = thd3 prop.Value
+            member _.GetValue() = thd3 prop.Value
             member _.Subscribe(observer) = (observer, prop) ||> mapSubsc thd3
             member _.OnNext(value) = prop.OnNext(r1.Value, r2.Value, value)
             member _.OnCompleted() = prop.OnCompleted()
             member _.OnError(error) = prop.OnError(error)
         } :> IProp<_>
     r1, r2, r3
-
+    
+[<CompiledName("FetchBoth")>]
+let fetchBoth context (prop: IProp<'T>) = DelegationProp(prop, prop, context) :> IProp<_>
+    
+[<CompiledName("FetchBoth"); Extension>]
+let fetchCurrentBoth (prop: IProp<'T>) = fetch SynchronizationContext.Current prop
+    
 // == command ======================================================================
 
 [<CompiledName("ToCommand")>]

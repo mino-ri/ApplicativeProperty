@@ -146,9 +146,9 @@ type ObserverProp<'T>(init: 'T, comparer: IEqualityComparer<'T>, context: Synchr
         member this.Dispose() = this.Dispose()
 
 
-type internal DelegationProp<'T>(observer: IObserver<'T>, prop: IGetProp<'T>) =
+type DelegationProp<'T>(observer: IObserver<'T>, prop: IGetProp<'T>, context: SynchronizationContext) =
     let events = PropertyChangedEventHolder<'T>(ResizeArray())
-    let context = SynchronizationContext.Current
+    member _.Value with get() = prop.Value and set v = observer.OnNext(v)
     interface IProp<'T> with
         member _.Value = prop.Value
         member _.OnNext(value) = observer.OnNext(value)
@@ -157,3 +157,4 @@ type internal DelegationProp<'T>(observer: IObserver<'T>, prop: IGetProp<'T>) =
         member _.Subscribe(onNext) = prop.Subscribe(onNext)
         member this.add_PropertyChanged(handler) = events.Add(handler, this, context)
         member _.remove_PropertyChanged(handler) = events.Remove(handler)
+    new(observer, prop) = DelegationProp<'T>(observer, prop, SynchronizationContext.Current)
