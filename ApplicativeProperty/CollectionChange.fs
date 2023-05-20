@@ -1,4 +1,5 @@
 ﻿namespace ApplicativeProperty
+
 open System.Collections.Generic
 open System.Collections.Specialized
 
@@ -9,7 +10,6 @@ type CollectionChange<'Item> =
     | Remove of index: int * items: IReadOnlyList<'Item>
     | Replace of index: int * oldItem: 'Item * newItem: 'Item
     | Reset of oldItems: IReadOnlyList<'Item> * newItems: IReadOnlyList<'Item>
-    with
     member this.Action =
         match this with
         | Add _ -> NotifyCollectionChangedAction.Add
@@ -57,24 +57,24 @@ module CollectionChange =
         match collectionChange with
         | CollectionChange.Replace(index, oldItem: 'Item, newItem) ->
             Seq.singleton (NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Replace, oldItem, newItem, index))
-        | CollectionChange.Reset _ ->
-            Seq.singleton (NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset))
+        | CollectionChange.Reset _ -> Seq.singleton (NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Reset))
         | CollectionChange.Add(index, items) ->
             // WPF は複数要素の一括Addに非対応なので、1つずつ送る
-            items |> Seq.indexed |> Seq.map(fun (ix, item) ->
-                NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, item, index + ix))
+            items
+            |> Seq.indexed
+            |> Seq.map (fun (ix, item) -> NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, item, index + ix))
         | CollectionChange.Remove(index, items) ->
             // WPF は複数要素の一括Removeに非対応なので、1つずつ送る
-            items |> Seq.rev |> Seq.indexed |> Seq.map(fun (ix, item) ->
-                NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, item, index + items.Count - 1 - ix))
+            items
+            |> Seq.rev
+            |> Seq.indexed
+            |> Seq.map (fun (ix, item) ->
+                NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, item, index + items.Count - 1 - ix)
+            )
 
     let map mapping collectionChange =
         match collectionChange with
-        | CollectionChange.Add(index, items) ->
-            add index (MappingList(mapping, items))
-        | CollectionChange.Remove(index, items) ->
-            remove index (MappingList(mapping, items))
-        | CollectionChange.Replace(index, oldItem, newItem) ->
-            replace index (mapping oldItem) (mapping newItem)
-        | CollectionChange.Reset(oldItems, newItems) ->
-            reset (MappingList(mapping, oldItems)) (MappingList(mapping, newItems))
+        | CollectionChange.Add(index, items) -> add index (MappingList(mapping, items))
+        | CollectionChange.Remove(index, items) -> remove index (MappingList(mapping, items))
+        | CollectionChange.Replace(index, oldItem, newItem) -> replace index (mapping oldItem) (mapping newItem)
+        | CollectionChange.Reset(oldItems, newItems) -> reset (MappingList(mapping, oldItems)) (MappingList(mapping, newItems))

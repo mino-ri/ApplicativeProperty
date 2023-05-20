@@ -1,4 +1,5 @@
 ﻿namespace ApplicativeProperty
+
 open System
 open System.Runtime.CompilerServices
 

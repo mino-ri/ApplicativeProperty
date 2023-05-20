@@ -1,5 +1,6 @@
-﻿[<AutoOpen>]
+[<AutoOpen>]
 module internal ApplicativeProperty.Internal
+
 open System
 open System.Collections
 open System.Collections.Generic
@@ -14,9 +15,9 @@ let tpl2 x y = x, y
 
 let tpl3 x y z = x, y, z
 
-let vfst struct(x, _) = x
+let vfst struct (x, _) = x
 
-let vsnd struct(_, x) = x
+let vsnd struct (_, x) = x
 
 let inline action0 (f: Action) = f.Invoke
 
@@ -34,18 +35,18 @@ let inline func2 (f: Func<_, _, _>) x y = f.Invoke(x, y)
 
 let inline func3 (f: Func<_, _, _, _>) x y z = f.Invoke(x, y, z)
 
-let inline tuple2 (f: Func<_, struct(_ * _)>) x = let struct(y, z) = f.Invoke(x) in y, z
+let inline tuple2 (f: Func<_, struct (_ * _)>) x = let struct (y, z) = f.Invoke(x) in y, z
 
-let inline tuple3 (f: Func<_, struct(_ * _ * _)>) x = let struct(y, z, w) = f.Invoke(x) in y, z, w
+let inline tuple3 (f: Func<_, struct (_ * _ * _)>) x = let struct (y, z, w) = f.Invoke(x) in y, z, w
 
 
 type MappingList<'T, 'U>(mapping: 'T -> 'U, source: IReadOnlyList<'T>) =
     let x = 0
     interface IReadOnlyList<'U> with
         member _.Count = source.Count
-        member _.Item with get(index) = mapping source.[index]
-        member this.GetEnumerator() : IEnumerator =
-            (this :> IReadOnlyList<'U>).GetEnumerator() :> IEnumerator
+        member _.Item
+            with get (index) = mapping source.[index]
+        member this.GetEnumerator() : IEnumerator = (this :> IReadOnlyList<'U>).GetEnumerator() :> IEnumerator
         member _.GetEnumerator() : IEnumerator<'U> =
             let inner = source.GetEnumerator()
             { new IEnumerator<'U> with
@@ -53,21 +54,23 @@ type MappingList<'T, 'U>(mapping: 'T -> 'U, source: IReadOnlyList<'T>) =
                 member _.Current: obj = box (mapping inner.Current)
                 member _.Dispose() = inner.Dispose()
                 member _.MoveNext() = inner.MoveNext()
-                member _.Reset() = inner.Reset() }
+                member _.Reset() = inner.Reset()
+            }
 
 
 [<AbstractClass>]
 type internal BasicObserver<'T>() =
     let mutable stoped = false
-    abstract member OnNext : 'T -> unit
-    abstract member OnCompleted : unit -> unit
-    abstract member OnError : exn -> unit
+    abstract member OnNext: 'T -> unit
+    abstract member OnCompleted: unit -> unit
+    abstract member OnError: exn -> unit
 
     interface IObserver<'T> with
         member this.OnNext(value) =
             if not stoped then
-                try this.OnNext(value) with
-                | error ->
+                try
+                    this.OnNext(value)
+                with error ->
                     stoped <- true
                     this.OnError(error)
 
@@ -90,9 +93,10 @@ type internal MapObserver<'T, 'U>(observer: IObserver<'T>) =
 
 
 let inline subsc onNext (observer: IObserver<_>) (observable: IObservable<_>) =
-    observable.Subscribe({new MapObserver<_, _>(observer) with
-        member _.OnNext(value) = onNext value
-    })
+    observable.Subscribe(
+        { new MapObserver<_, _>(observer) with
+            member _.OnNext(value) = onNext value
+        }
+    )
 
-let inline mapSubsc mapping (observer: IObserver<_>) (observable: IObservable<_>) =
-    subsc (mapping >> observer.OnNext) observer observable
+let inline mapSubsc mapping (observer: IObserver<_>) (observable: IObservable<_>) = subsc (mapping >> observer.OnNext) observer observable

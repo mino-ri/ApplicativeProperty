@@ -1,4 +1,5 @@
 ﻿namespace ApplicativeProperty
+
 open System
 open System.Collections.Generic
 open System.Collections.Specialized
@@ -11,7 +12,7 @@ type ISubject<'T> =
 type IGetProp<'T> =
     inherit IObservable<'T>
     inherit INotifyPropertyChanged
-    abstract member Value : 'T
+    abstract member Value: 'T
 
 type IProp<'T> =
     inherit IGetProp<'T>
@@ -25,4 +26,4 @@ type IReactiveCollection<'T> =
     inherit IObservable<CollectionChange<'T>>
     inherit INotifyCollectionChanged
     inherit IReadOnlyList<'T>
-    abstract member CountProp : IGetProp<int>
+    abstract member CountProp: IGetProp<int>

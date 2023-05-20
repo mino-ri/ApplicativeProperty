@@ -1,22 +1,26 @@
 ﻿namespace ApplicativeProperty
+
 open System
 open System.Collections.Generic
 open System.ComponentModel
 open System.Threading
 
 
-type internal PropertyChangedEventHolder<'T>(eventDisposers: ResizeArray<struct(PropertyChangedEventHandler * IDisposable)>) =
+type internal PropertyChangedEventHolder<'T>(eventDisposers: ResizeArray<struct (PropertyChangedEventHandler * IDisposable)>) =
     struct
-        member _.Add(handler: PropertyChangedEventHandler, target : IObservable<'T>, context: SynchronizationContext) =
-            if isNull context then nullArg (nameof context)
-            let disposer = target.Subscribe(fun _ ->
-                context.Post(SendOrPostCallback(fun _ ->
-                    handler.Invoke(target, PropertyChangedEventArgs("Value"))), null))
+        member _.Add(handler: PropertyChangedEventHandler, target: IObservable<'T>, context: SynchronizationContext) =
+            if isNull context then
+                nullArg (nameof context)
+            let disposer =
+                target.Subscribe(fun _ ->
+                    context.Post(SendOrPostCallback(fun _ -> handler.Invoke(target, PropertyChangedEventArgs("Value"))), null)
+                )
             eventDisposers.Add(handler, disposer)
 
         member _.Remove(handler: PropertyChangedEventHandler) =
-            let index = eventDisposers.FindIndex(0, fun struct(eh, _) -> eh = handler)
-            match eventDisposers.[index] with (_, d) -> d.Dispose()
+            let index = eventDisposers.FindIndex(0, (fun struct (eh, _) -> eh = handler))
+            match eventDisposers.[index] with
+            | (_, d) -> d.Dispose()
             eventDisposers.RemoveAt(index)
     end
 
@@ -35,11 +39,17 @@ type internal ObserverHolder<'T>(collection: ResizeArray<ObserverHolder<'T>>, ob
 type Subject<'T>() =
     let observers = ResizeArray<ObserverHolder<'T>>()
 
-    member _.OnNext(value) = for holder in observers do holder.Observer.OnNext(value)
+    member _.OnNext(value) =
+        for holder in observers do
+            holder.Observer.OnNext(value)
 
-    member _.OnCompleted() = for holder in observers do holder.Observer.OnCompleted()
+    member _.OnCompleted() =
+        for holder in observers do
+            holder.Observer.OnCompleted()
 
-    member _.OnError(error) = for holder in observers do holder.Observer.OnError(error)
+    member _.OnError(error) =
+        for holder in observers do
+            holder.Observer.OnError(error)
 
     member _.Subscribe(observer) =
         let holder = new ObserverHolder<'T>(observers, observer)
@@ -58,8 +68,10 @@ type ValueProp<'T>(init: 'T, comparer: IEqualityComparer<'T>, context: Synchroni
     let observers = ResizeArray<ObserverHolder<'T>>()
     let events = PropertyChangedEventHolder<'T>(ResizeArray())
 
-    member this.Value with get() = backField and set(v) = this.OnNext(v)
-    
+    member this.Value
+        with get () = backField
+        and set (v) = this.OnNext(v)
+
     member _.Subscribe(onNext) =
         let holder = new ObserverHolder<'T>(observers, onNext)
         observers.Add(holder)
@@ -68,18 +80,28 @@ type ValueProp<'T>(init: 'T, comparer: IEqualityComparer<'T>, context: Synchroni
     member _.OnNext(value) =
         if not (comparer.Equals(backField, value)) then
             backField <- value
-            for holder in observers do holder.Observer.OnNext(value)
+            for holder in observers do
+                holder.Observer.OnNext(value)
 
-    member _.OnCompleted() = for holder in observers do holder.Observer.OnCompleted()
+    member _.OnCompleted() =
+        for holder in observers do
+            holder.Observer.OnCompleted()
 
-    member _.OnError(error) = for holder in observers do holder.Observer.OnError(error)
+    member _.OnError(error) =
+        for holder in observers do
+            holder.Observer.OnError(error)
 
     new(init: 'T) = ValueProp(init, EqualityComparer.Default, SynchronizationContext.Current)
     new(init: 'T, context: SynchronizationContext) = ValueProp(init, EqualityComparer.Default, context)
-    new(init: 'T, compare: 'T -> 'T -> bool) = ValueProp(init, { new IEqualityComparer<'T> with
-            member _.Equals(x, y) = compare x y
-            member _.GetHashCode(_) = 0 // not used
-        }, SynchronizationContext.Current)
+    new(init: 'T, compare: 'T -> 'T -> bool) =
+        ValueProp(
+            init,
+            { new IEqualityComparer<'T> with
+                member _.Equals(x, y) = compare x y
+                member _.GetHashCode(_) = 0 // not used
+            },
+            SynchronizationContext.Current
+        )
 
     interface IProp<'T> with
         member this.Value = this.Value
@@ -113,9 +135,14 @@ type ObserverProp<'T>(init: 'T, comparer: IEqualityComparer<'T>, context: Synchr
             member _.OnNext(value) =
                 if not (comparer.Equals(backField, value)) then
                     backField <- value
-                    for holder in observers do holder.Observer.OnNext(value)
-            member _.OnCompleted() = for holder in observers do holder.Observer.OnCompleted()
-            member _.OnError(error) = for holder in observers do holder.Observer.OnError(error)
+                    for holder in observers do
+                        holder.Observer.OnNext(value)
+            member _.OnCompleted() =
+                for holder in observers do
+                    holder.Observer.OnCompleted()
+            member _.OnError(error) =
+                for holder in observers do
+                    holder.Observer.OnError(error)
         }
 
     member _.Value = backField
@@ -131,10 +158,15 @@ type ObserverProp<'T>(init: 'T, comparer: IEqualityComparer<'T>, context: Synchr
 
     new(init: 'T) = new ObserverProp<'T>(init, EqualityComparer.Default, SynchronizationContext.Current)
     new(init: 'T, context: SynchronizationContext) = new ObserverProp<'T>(init, EqualityComparer.Default, context)
-    new(init: 'T, compare: 'T -> 'T -> bool) = new ObserverProp<'T>(init, { new IEqualityComparer<'T> with
-            member _.Equals(x, y) = compare x y
-            member _.GetHashCode(_) = 0 // not used
-        }, SynchronizationContext.Current)
+    new(init: 'T, compare: 'T -> 'T -> bool) =
+        new ObserverProp<'T>(
+            init,
+            { new IEqualityComparer<'T> with
+                member _.Equals(x, y) = compare x y
+                member _.GetHashCode(_) = 0 // not used
+            },
+            SynchronizationContext.Current
+        )
 
     interface IGetProp<'T> with
         member this.Value = this.Value
@@ -148,7 +180,9 @@ type ObserverProp<'T>(init: 'T, comparer: IEqualityComparer<'T>, context: Synchr
 
 type DelegationProp<'T>(observer: IObserver<'T>, prop: IGetProp<'T>, context: SynchronizationContext) =
     let events = PropertyChangedEventHolder<'T>(ResizeArray())
-    member _.Value with get() = prop.Value and set v = observer.OnNext(v)
+    member _.Value
+        with get () = prop.Value
+        and set v = observer.OnNext(v)
     interface IProp<'T> with
         member _.Value = prop.Value
         member _.OnNext(value) = observer.OnNext(value)

@@ -1,4 +1,5 @@
 ﻿module ApplicativeProperty.Sample.Main
+
 open System
 open System.Windows
 

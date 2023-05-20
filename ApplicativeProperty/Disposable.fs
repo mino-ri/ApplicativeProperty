@@ -1,4 +1,5 @@
-﻿namespace ApplicativeProperty
+namespace ApplicativeProperty
+
 open System
 open System.Collections
 open System.Collections.Generic
@@ -9,19 +10,20 @@ type ActionDisposable(onDispose: unit -> unit) =
         member __.Dispose() =
             if not disposed then
                 disposed <- true
-                onDispose()
+                onDispose ()
 
 
 type CompositeDisposable(source: seq<IDisposable>) =
     let storage = ResizeArray(source)
     let mutable disposed = false
 
-    member __.Add(item: IDisposable) =
-        if disposed then item.Dispose()
-        else storage.Add(item)
+    member __.Add(item: IDisposable) = if disposed then item.Dispose() else storage.Add(item)
     member __.AddRange(items: seq<IDisposable>) =
-        if disposed then for item in items do item.Dispose()
-        else storage.AddRange(items)
+        if disposed then
+            for item in items do
+                item.Dispose()
+        else
+            storage.AddRange(items)
     member __.Clear() = storage.Clear()
     member __.Contains(item) = storage.Contains(item)
     member __.CopyTo(array, arrayIndex) = storage.CopyTo(array, arrayIndex)
@@ -31,7 +33,8 @@ type CompositeDisposable(source: seq<IDisposable>) =
     member __.Dispose() =
         if not disposed then
             disposed <- true
-            for item in storage do item.Dispose()
+            for item in storage do
+                item.Dispose()
             storage.Clear()
     new() = new CompositeDisposable(Array.Empty())
 
@@ -65,7 +68,10 @@ type CompositeDisposable(source: seq<IDisposable>) =
 
 module Disposable =
     [<CompiledName("Dummy")>]
-    let dummy = { new IDisposable with member __.Dispose() = () }
+    let dummy =
+        { new IDisposable with
+            member __.Dispose() = ()
+        }
 
     [<CompiledName("Create")>]
     let create onDispose = new ActionDisposable(onDispose) :> IDisposable

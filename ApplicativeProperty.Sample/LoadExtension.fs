@@ -1,4 +1,5 @@
 ﻿namespace ApplicativeProperty.Sample
+
 open System
 open System.Windows
 open System.Windows.Markup
@@ -10,5 +11,4 @@ type LoadExtension(uri: string) =
 
     new() = LoadExtension("")
 
-    override this.ProvideValue(_) =
-        Application.LoadComponent(Uri(this.Uri, UriKind.Relative))
+    override this.ProvideValue(_) = Application.LoadComponent(Uri(this.Uri, UriKind.Relative))
