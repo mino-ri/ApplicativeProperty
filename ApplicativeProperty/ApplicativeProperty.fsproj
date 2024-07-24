@@ -2,6 +2,17 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
+
+    <InformationalVersion>1.0.0</InformationalVersion>
+    <VersionPrefix>1.0.0</VersionPrefix>
+    <Authors>mino-ri</Authors>
+    <Copyright>© 2023 mino-ri</Copyright>
+
+    <PackageProjectUrl>https://github.com/mino-ri/ApplicativeProperty</PackageProjectUrl>
+    <RepositoryUrl>$(PackageProjectUrl)</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <IsPackable>true</IsPackable>
+    <PackageId>Minori.Local.ApplicativeProperty</PackageId>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
